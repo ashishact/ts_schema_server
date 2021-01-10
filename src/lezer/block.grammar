@@ -1,0 +1,20 @@
+@top Program { Block }
+
+Block { BlockType BlockName "{" nl* Fields  "}" }
+BlockType { name }
+BlockName { name }
+Fields { Field+ }
+Field { FieldName FieldType Constraints ((","  nl*) | nl+) }
+FieldName { name }
+FieldType { name }
+Constraints { Constraint* }
+Constraint { name }
+
+@tokens {
+  name { std.asciiLetter+ }
+  space { $[ \t\f]+ }
+  Comment { "//" ![\n]* }
+  nl { $[\n] }
+}
+
+@skip { space | Comment }

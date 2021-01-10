@@ -1,0 +1,16 @@
+# Use postgres/example user/password credentials
+version: '3.6'
+
+services:
+    postgres:
+        image: postgres:latest
+        ports:
+            - "5432:5432"
+        restart: always
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        environment:
+            POSTGRES_PASSWORD: hiuDPEwsEQfGKnmeSHcuJQ==
+            POSTGRES_DB: appdb
+volumes:
+    postgres_data:
