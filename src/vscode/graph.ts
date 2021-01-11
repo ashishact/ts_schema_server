@@ -1,8 +1,9 @@
 import {Graph} from "redisgraph.js"
 import NodeType from "redisgraph.js/src/node";
 import GraphType from "redisgraph.js/src/graph";
-
+import ResultSet from "redisgraph.js/src/resultSet";
 import type {ModelSource} from "./parser";
+
 
 const l = console.log;
 
@@ -45,6 +46,16 @@ export let testGraph = async () => {
 
 }
 
+
+const printStats = (res: ResultSet) => {
+    let stats = res.getStatistics();
+    let execTime = stats.queryExecutionTime();
+    let altered = stats.nodesCreated() || stats.nodesDeleted() || stats.labelsAdded()|| stats.relationshipsCreated() || stats.relationshipsDeleted();
+    if(execTime > 5 || altered){ // ms || count
+        l(stats._raw);
+    }
+}
+
 const createPrimitive = async () => {
     if(!graph) return;
 
@@ -58,7 +69,7 @@ const createPrimitive = async () => {
 
     let res = await graph.query(q).catch(l);
     if(res){
-        l(res.getStatistics());
+        printStats(res);
         let vs = res.next()?.getString('"OK"');
         if(vs === "OK"){
             l("PRIMITIVE CREATED");
@@ -124,11 +135,14 @@ export const updateModel = async (source: ModelSource) => {
             // Query
             let res = await graph.query(q).catch(l);
             if(res){
-                l(res.getStatistics());
+                printStats(res);
+
                 let vs = res.next()?.getString('"OK"');
                 if(vs === "OK"){
                     isModelUpdated = true;
-                    l("SUCCESS");
+                }
+                else{
+                    l("FAILED => ", q);
                 }
             }
 
@@ -195,12 +209,10 @@ export const updateModel = async (source: ModelSource) => {
     
                 res = await graph.query(dq).catch(l);
                 if(res){
-                    // l(res.getStatistics());
+                    printStats(res);
                 }
             }
 
-
-            m.changed = false;
         }
     }
 
@@ -224,6 +236,12 @@ export const updateModel = async (source: ModelSource) => {
         DELETE m
     `;
     let res = await graph.query(dq).catch(l);
+    if(res){
+        printStats(res);
+    }
+
+
+    
 
 
 

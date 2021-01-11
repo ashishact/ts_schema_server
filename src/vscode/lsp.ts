@@ -30,6 +30,7 @@ import {v4 as uuid} from "uuid";
 
 import {hack} from "../hack";
 import { parse } from "./parser";
+import {updateModel as updateModelTs} from "../core/ts_model"
 import {updateModel} from "./graph";
 
 import type {ModelSource} from "./parser";
@@ -197,9 +198,14 @@ const acceptClient = (socket: net.Socket)=>{
         let text = textDocument.getText();
         let path = textDocument.uri.replace(rootPath, "").replace("/", "");
         // /a/b.ail => a/b.ail
+        
         let source = parse(text, path);
         
         await updateModel(source);
+        // await updateModelTs(source, true);
+
+        // finally 
+        source.models.forEach(m=>m.changed = false);
 
         sendDiagnostics(textDocument, source);
         l("=====>")
