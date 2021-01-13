@@ -30,7 +30,7 @@ import {v4 as uuid} from "uuid";
 
 import {hack} from "../hack";
 import { parse } from "./parser";
-import {updateModel as updateModelTs} from "../core/ts_model"
+// import {updateModel as updateModelTs} from "../core/ts_model"
 import {updateModel} from "./graph";
 
 import type {ModelSource} from "./parser";
@@ -204,8 +204,15 @@ const acceptClient = (socket: net.Socket)=>{
         await updateModel(source);
         // await updateModelTs(source, true);
 
+
+
+
+
+
         // finally 
         source.models.forEach(m=>m.changed = false);
+        source.code.forEach(c=>c.changed = false);
+
 
         sendDiagnostics(textDocument, source);
         l("=====>")
@@ -224,6 +231,8 @@ const acceptClient = (socket: net.Socket)=>{
 			// The pass parameter contains the position of the text document in
 			// which code complete got requested. For the example we ignore this
             // info and always provide the same completion items.
+
+            l("onCompletion", pos);
             
 			return [
 				{

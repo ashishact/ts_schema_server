@@ -6,10 +6,11 @@ import md5 from "md5"
 
 const l = console.log;
 
-interface aststring{
+interface aststring {
     value: string,
     from: number,
     to: number,
+    hash?: string,
     error?: string,
     warn?: string
     suggestion?: string
@@ -43,9 +44,19 @@ export interface Model {
     hasError?: boolean
 }
 
+interface Code{
+    hash: string,
+    text: string,
+    from: number,
+    to: number,
+    changed: boolean,
+    hasError?: boolean
+}
+
 export interface ModelSource {
     fileName: string,
     models: Model[],
+    code: Code[]
 }
 
 let sources: {[uriName:string]: ModelSource} = {}
@@ -67,7 +78,8 @@ export const parse = (text: string, path: string) => {
     if(!source){
         source = {
             fileName: fileName,
-            models: []
+            models: [],
+            code: []
         }
         sources[fileName] = source; // save
     };
@@ -205,9 +217,61 @@ export const parse = (text: string, path: string) => {
     // l(source.models.map(m=>{return{c: m.changed, n: m.ast.name}})); // @2see which models have changed
 
     // l(source.models[0].ast.fields);
-
-
     source.models = source.models.filter(m=>currHashes.includes(m.hash));
+
+
+    // code
+
+    prevHashes = source.code.map(c=>c.hash);
+    currHashes = [];
+    pattern = /[\n^]ts\s+[a-z]+\s*\{/g;
+    while (m = pattern.exec(text)){
+        let s = "";
+        let c = '{';
+        let curlies = [c];
+        let bi = m.index + m[0].length;
+        for(let i = bi; i < text.length; i++){
+            c = text[i];
+            if(c === '{'){
+                curlies.push(c);
+            }
+            else if(c === '}'){
+                curlies.pop();
+                if(curlies.length === 0){
+                    s = text.substring(bi, i);
+                    break;
+                }
+            }
+        }
+        let hash = md5(s);
+        currHashes.push(hash);
+
+        if(!prevHashes.includes(hash)){
+            source.code.push({
+                from: bi,
+                to: bi + s.length,
+                text: s,
+                hash: hash,
+                changed: true
+            })
+        }
+        else{
+            // code hasn't change
+            // but it's offset in the file might have changed
+            source.code.find((code)=>{
+                if(code.hash === hash){
+                    code.from = bi;
+                    code.to = bi + s.length
+                    return true;
+                }
+                return false;
+            });   
+        }
+    }
+    
+    source.code = source.code.filter(c=>currHashes.includes(c.hash));
+
+
 
 	return source;
 }
