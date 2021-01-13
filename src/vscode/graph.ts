@@ -85,25 +85,45 @@ export const updateModel = async (source: ModelSource) => {
     if(!graph) return;
 
     let filename = source.fileName;
+
+
+
+    // 1. add all model names
+    let q = "";
     for(let m of source.models){
-        if(m.changed ){
-            let a = m.ast;
-            let modelname = a.name.value.trim();
-            let modeltype = a.type.value.trim();
+        let modelname = m.name.value;
+        if(m.changed && modelname){
+            q+= `MERGE (${modelname}:model { name: "${modelname}", file: "${filename}"})\n`;
+        }
+    }
+    // query
+    let res = await graph.query(q).catch(l);
+    if(res){
+        printStats(res);
+    }
+
+
+
+    // 2. try adding each model
+    for(let m of source.models){
+        if(m.changed || m.hasError){
+            // if it has error with dependency, then even if it's not changed 
+            // maybe the dependency has been solved
+
+            let modelname = m.name.value;
+            let modeltype = m.type.value;
             
             // sanity check
             if(!modelname) {
                 m.hasError = true;
-                a.hasError = true;
-                a.name.error = "Model name is required";
-                a.name.suggestion = "e.g => model Student {\n name string\nroll number \n}"
+                m.name.error = "Model name is required";
+                m.name.suggestion = "e.g => model Student {\n name string\nroll number \n}"
                 continue;
             }
             if(!modeltype){
                 m.hasError = true;
-                a.hasError = true;
-                a.type.error = "Model type is required";
-                a.type.suggestion = "e.g => model Student {\n name string\nroll number \n}"
+                m.type.error = "Model type is required";
+                m.type.suggestion = "e.g => model Student {\n name string\nroll number \n}"
                 continue;
             }
 
@@ -112,17 +132,17 @@ export const updateModel = async (source: ModelSource) => {
 
 
             let q = "";
-            for(let f of a.fields){
-                let type = f.type.value.trim();
+            for(let f of m.fields){
+                let type = f.type.value;
                 if(!type) continue;
                 q+= `MATCH (${type}:model {name: "${type}"})\n`;
             }
             
             q+= `MERGE (${modelname}:model { name: "${modelname}", file: "${filename}"})\n`;
             
-            for(let f of a.fields){
-                let type = f.type.value.trim();
-                let name = f.name.value.trim();
+            for(let f of m.fields){
+                let type = f.type.value;
+                let name = f.name.value;
                 if(!type || !name) continue;
                 q+= `MERGE (${type})-[:FIELD {name: "${name}"}]->(${modelname})\n`;
             }
@@ -130,7 +150,6 @@ export const updateModel = async (source: ModelSource) => {
             q+= `RETURN "OK"\n`;
 
 
-            let isModelUpdated = false;
             
             // Query
             let res = await graph.query(q).catch(l);
@@ -139,16 +158,17 @@ export const updateModel = async (source: ModelSource) => {
 
                 let vs = res.next()?.getString('"OK"');
                 if(vs === "OK"){
-                    isModelUpdated = true;
+                    m.hasError = false;
                 }
                 else{
+                    m.hasError = true;
                     l("FAILED => ", q);
                 }
             }
 
 
 
-            if(!isModelUpdated){
+            if(m.hasError){
                 // l(q);
 
                 // When there are field types that don't exist the above query will fail
@@ -159,19 +179,15 @@ export const updateModel = async (source: ModelSource) => {
                 // l("ADDED MODEL NAME");
 
 
-                // let's get the errors
-                m.hasError = true;
-                a.hasError = true;
-
                 // fields error
-                for(let f of a.fields){
-                    if(!f.name.value.trim()) {
+                for(let f of m.fields){
+                    if(!f.name.value) {
                         f.hasError = true;
                         f.type.error = `no name found`;
                         f.type.suggestion = `e.g. name string`;
                         continue;
                     }
-                    if(!f.type.value.trim()) {
+                    if(!f.type.value) {
                         f.hasError = true;
                         f.type.error = `no type found`;
                         f.type.suggestion = `e.g. name string`;
@@ -194,12 +210,12 @@ export const updateModel = async (source: ModelSource) => {
             
 
             // remove orphan fields
-            if(isModelUpdated){
+            if(!m.hasError){
                 // Delete removed 
                 // MATCH (f:model)-[r:FIELD]->(m:model{name: "Student"}) WHERE not (r.name IN ["fieldname"])
                 // return r
     
-                let fieldNames = JSON.stringify(m.ast.fields.map(f=>f.name.value)); // current field names
+                let fieldNames = JSON.stringify(m.fields.map(f=>f.name.value)); // current field names
     
                 let dq = "";
                 dq+= `MATCH (f:model)-[r:FIELD]->(m:model{name: "${modelname}", file: "${filename}"}) `
@@ -216,28 +232,22 @@ export const updateModel = async (source: ModelSource) => {
         }
     }
 
-    /*
-    // remove orphan model 
-    // @todo: remove only from this file
-    let modelNames = JSON.stringify(source.models.map(m=>m.ast.name.value));
-    let dq = `
-        MATCH (m:model {file: "${filename}"})
-        WHERE (NOT (()-[:FIELD]->(m) OR ()<-[:FIELD]-(m)))  AND  (NOT m.name IN ${modelNames})
-        DELETE m
-    `;
-    let res = await graph.query(dq).catch(l);
-    */
 
-    // remove orphan for this file
-    let modelNames = JSON.stringify(source.models.map(m=>m.ast.name.value.trim()));
+
+    // 3. remove orphan for this file
+    let modelNames = JSON.stringify(source.models.map(m=>m.name.value));
     let dq = `
         MATCH (m:model {file: "${filename}"})
         WHERE NOT (m.name IN ${modelNames})
         DELETE m
+        RETURN m
     `;
-    let res = await graph.query(dq).catch(l);
+    res = await graph.query(dq).catch(l);
     if(res){
         printStats(res);
+        
+        // find the related model who depends on this
+        // show error in them
     }
 
 

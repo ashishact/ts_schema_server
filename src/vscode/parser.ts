@@ -3,6 +3,7 @@ import {Tree, TreeCursor} from "lezer"
 import {parser} from "../lezer/block.js"
 import * as TERM from "../lezer/block.terms.js"
 import md5 from "md5"
+import { bool } from "aws-sdk/clients/signer";
 
 const l = console.log;
 
@@ -27,20 +28,17 @@ interface Field {
     constraints: Constraint[],
     hasError?: boolean
 }
-interface Ast {
+
+export interface Model {
     name: aststring,
     type: aststring,
-    fields: Field[],
-    hasError?: boolean
-    isValid?: boolean
-}
-export interface Model {
     hash: string,
     text: string,
     from: number,
     to: number,
-    ast: Ast,
+    fields: Field[],
     changed: boolean,
+    hasValidAst?: boolean,
     hasError?: boolean
 }
 
@@ -102,10 +100,15 @@ export const parse = (text: string, path: string) => {
 
 
             let defaultobj = {value: "", from: 0, to: 0};
-            let ast: Ast = {
+            let model:Model = {
                 name: defaultobj,
+                type: defaultobj,
+                hash: hash,
+                text:s,
+                from: m.index, 
+                to: m.index + s.length,
                 fields: [],
-                type: defaultobj
+                changed: true,
             }
 
             let field: Field = {
@@ -121,61 +124,61 @@ export const parse = (text: string, path: string) => {
                 let n = c.node;
 
                 if(n.type.id === TERM.BlockType){
-                    ast.type = {
-                        value: s.substring(c.from, c.to),
+                    model.type = {
+                        value: s.substring(c.from, c.to).trim(),
                         from: c.from,
                         to: c.to
                     }
                 }
                 else if(n.type.id === TERM.BlockName){
-                    ast.name = {
-                        value: s.substring(c.from, c.to),
+                    model.name = {
+                        value: s.substring(c.from, c.to).trim(),
                         from: c.from,
                         to: c.to
                     }
                 }
                 else if(n.type.id === TERM.Field){
                     // push because it's a container
-                    ast.fields.push({
+                    model.fields.push({
                         name: defaultobj,
                         type: defaultobj,
                         constraints: []
                     });
                 }
                 else if(n.type.id === TERM.FieldName){
-                    let f = ast.fields;
+                    let f = model.fields;
                     if(f.length){
                         f[f.length-1].name = {
-                            value: s.substring(c.from, c.to),
+                            value: s.substring(c.from, c.to).trim(),
                             from: c.from,
                             to: c.to
                         }
                     }
                 }
                 else if(n.type.id === TERM.FieldType){
-                    let fs = ast.fields;
+                    let fs = model.fields;
                     if(fs.length){
                         let last_f = fs[fs.length-1];
                         last_f.type = {
-                            value: s.substring(c.from, c.to),
+                            value: s.substring(c.from, c.to).trim(),
                             from: c.from,
                             to: c.to
                         }
                     }
                 }
                 else if(n.type.id === TERM.Constraint){
-                    let fs = ast.fields;
+                    let fs = model.fields;
                     if(fs.length){
                         let last_f = fs[fs.length-1];
                         let cs = last_f.constraints;
                         cs.push({
                             name: {
-                                value: s.substring(c.from, c.to),
+                                value: s.substring(c.from, c.to).trim(),
                                 from: c.from,
                                 to: c.to
                             },
                             type: {
-                                value: s.substring(c.from, c.to),
+                                value: s.substring(c.from, c.to).trim(),
                                 from: c.from,
                                 to: c.to
                             }
@@ -188,14 +191,7 @@ export const parse = (text: string, path: string) => {
             } while (c.next())
 
 
-            source.models.push({
-                hash: hash,
-                text:s,
-                from: m.index, 
-                to: m.index + s.length,
-                ast: ast,
-                changed: true,
-            });
+            source.models.push(model);
 
         }
         else{

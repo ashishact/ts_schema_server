@@ -145,7 +145,7 @@ const acceptClient = (socket: net.Socket)=>{
             if(!m.hasError) continue;
 
             // field errors
-            for(let f of m.ast.fields){
+            for(let f of m.fields){
                 if(!f.hasError) continue;
 
                 // name errors
