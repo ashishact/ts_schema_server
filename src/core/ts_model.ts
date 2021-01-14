@@ -1,4 +1,4 @@
-import { Project, ts, SourceFile, StructureKind } from "ts-morph";
+import { Project, ts,  SourceFile, StructureKind } from "ts-morph";
 
 import { Sequelize, DataTypes } from "sequelize";
 
@@ -16,7 +16,7 @@ const languageservice = project.getLanguageService();
 
 
 interface FileMaps {
-    [fileName: string]: SourceFile,
+    [fileName: string]: SourceFile|null,
 }
 const fileMaps: FileMaps = {};
 
@@ -43,15 +43,6 @@ export const updateModel = async (modelSource: ModelSource, save: boolean) => {
 
         fileMaps[fileName] = source;
 
-
-        // imports 
-        // import {Entity, PrimaryGeneratedColumn, Column} from "typeorm";
-        source.addImportDeclaration(
-            {
-                defaultImport: "{EntitySchema}",
-                moduleSpecifier: "typeorm"
-            }
-        );
     }
     
     let codeChanged = false;
@@ -69,9 +60,21 @@ export const updateModel = async (modelSource: ModelSource, save: boolean) => {
     }
 
 
+
     
 
 
+}
+
+export const getCompletions = async (fileName: string, pos: number) => {
+    l(fileName);
+    let path = fs.getCurrentDirectory() + `/src/generated/${fileName}.ts`;
+    let source = fileMaps[fileName];
+    if(!source) return;
+
+    let acs = await languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), pos, {});
+
+    return acs;
 }
 
 export const deleteUnused = async (modelNames: string[], save: boolean) => {
@@ -109,4 +112,15 @@ export const init = async () => {
 
 
 
-init();
+// init();
+
+
+
+export const testLs = ()=>{
+    // let text = `let abc: number = "32".`;
+    // let source = project.createSourceFile("./test.ts", text);
+
+    // // let d = languageservice.compilerObject.getDefinitionAtPosition(source.getFilePath(), 6);
+    // let d = languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), text.length, {});
+    // l(d);
+}

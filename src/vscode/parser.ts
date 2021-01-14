@@ -59,6 +59,8 @@ export interface ModelSource {
 
 let sources: {[uriName:string]: ModelSource} = {}
 
+export const getSource = (fileName: string) => sources[fileName];
+
 export const parse = (text: string, path: string) => {
 
 

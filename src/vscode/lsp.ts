@@ -2,7 +2,7 @@ import * as net from 'net';
 import { 
     createConnection,
     SocketMessageReader,
-    SocketMessageWriter 
+    SocketMessageWriter
 } from "vscode-languageserver/node";
 
 import {
@@ -20,6 +20,7 @@ import {
     InitializeResult,
 } from 'vscode-languageserver';
 
+
 import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
@@ -29,11 +30,13 @@ import {v4 as uuid} from "uuid";
 
 
 import {hack} from "../hack";
-import { parse } from "./parser";
-// import {updateModel as updateModelTs} from "../core/ts_model"
+import { parse , getSource} from "./parser";
+import {updateModel as updateModelTs} from "../core/ts_model"
+import {testLs, getCompletions} from "../core/ts_model";
 import {updateModel} from "./graph";
 
 import type {ModelSource} from "./parser";
+import { off } from 'process';
 
 
 
@@ -41,11 +44,6 @@ hack(); // @required
 
 
 const l = console.log;
-
-
-
-
-
 
 
 
@@ -104,6 +102,7 @@ const acceptClient = (socket: net.Socket)=>{
 				textDocumentSync: TextDocumentSyncKind.Full,
 				// Tell the client that the server supports code completion
 				completionProvider: {
+                    triggerCharacters: ["."],
 					resolveProvider: true
 				}
 			}
@@ -129,6 +128,7 @@ const acceptClient = (socket: net.Socket)=>{
 			});
 		}
     });
+
 
 
 	// The content of a text document has changed. This event is emitted
@@ -202,7 +202,7 @@ const acceptClient = (socket: net.Socket)=>{
         let source = parse(text, path);
         
         await updateModel(source);
-        // await updateModelTs(source, true);
+        await updateModelTs(source, true);
 
 
 
@@ -227,25 +227,74 @@ const acceptClient = (socket: net.Socket)=>{
 
 	// This handler provides the initial list of the completion items.
 	connection.onCompletion(
-		(pos: TextDocumentPositionParams): CompletionItem[] => {
+		async (pos: TextDocumentPositionParams): Promise<CompletionItem[]> => {
 			// The pass parameter contains the position of the text document in
 			// which code complete got requested. For the example we ignore this
             // info and always provide the same completion items.
+            let path = pos.textDocument.uri.replace(rootPath, "").replace("/", "");
+            let fileName = path.replace("/", ".");
 
-            l("onCompletion", pos);
+            let source = getSource(fileName);
+            if(!source) return [];
+
+            if(!source.code.length) return [];
+
+
+            let doc = documents.get(pos.textDocument.uri);
+            if(!doc) return [];
+
+
+            let offset = doc.offsetAt(pos.position);
             
-			return [
-				{
-					label: 'Student',
-					kind: CompletionItemKind.Variable,
-					data: 1
-				},
-				{
-					label: 'JavaScript',
-					kind: CompletionItemKind.Text,
-					data: 2
-				}
-			];
+            let posInGenerated = offset - source.code[0].from;
+
+            let comps = await getCompletions(fileName, posInGenerated);
+            if(!comps) return [];
+            
+            
+            return comps.entries.map((c)=>{
+                let kind:CompletionItemKind = CompletionItemKind.Text;
+                if(c.kind === "method"){
+                    kind = CompletionItemKind.Method
+                }
+                else if(c.kind === "function"){
+                    kind = CompletionItemKind.Function
+                }
+                else if(c.kind === "var" || c.kind === "let"){
+                    kind = CompletionItemKind.Variable
+                }
+                else if(c.kind === "const"){
+                    kind = CompletionItemKind.Constant
+                }
+                else if(c.kind === "property"){
+                    kind = CompletionItemKind.Property
+                }
+                else if(c.kind === "class"){
+                    kind = CompletionItemKind.Class
+                }
+                else if(c.kind === "keyword"){
+                    kind = CompletionItemKind.Keyword
+                }
+                else if(c.kind === "type"){
+                    kind = CompletionItemKind.Keyword
+                }
+                else if(c.kind === "interface"){
+                    kind = CompletionItemKind.Interface
+                }
+                else if(c.kind === "module"){
+                    kind = CompletionItemKind.Module
+                }
+                else{
+                    l(c.kind);
+                }
+
+                return {
+                    label: c.name,
+                    kind: kind,
+                    data: c.sortText
+                }
+            })
+
 		}
 	);
 
