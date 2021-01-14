@@ -31,7 +31,7 @@ import {v4 as uuid} from "uuid";
 
 import {hack} from "../hack";
 import { parse , getSource} from "./parser";
-import {updateModel as updateModelTs} from "../core/ts_model"
+import {updateDocument} from "../core/ts_model"
 import {testLs, getCompletions} from "../core/ts_model";
 import {updateModel} from "./graph";
 
@@ -57,7 +57,8 @@ const acceptClient = (socket: net.Socket)=>{
     // Create a simple text document manager. The text document manager
     // supports full document sync only
     let documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
-    let rootPath: string = "";
+    let rootUri: string = "";
+    let rootPath: string = ""; // without file://
     
     let hasConfigurationCapability: boolean = false;
     let hasWorkspaceFolderCapability: boolean = false;
@@ -78,7 +79,8 @@ const acceptClient = (socket: net.Socket)=>{
         //     name: 'testdoc'
         // }]
         if(folders?.length){
-            rootPath = folders[0].uri;
+            rootUri = folders[0].uri;
+            rootPath = rootUri.replace("file://", "");
         }
 
 		let capabilities = params.capabilities;
@@ -196,13 +198,13 @@ const acceptClient = (socket: net.Socket)=>{
 
 	async function validateTextDocument(textDocument: TextDocument): Promise<void> {
         let text = textDocument.getText();
-        let path = textDocument.uri.replace(rootPath, "").replace("/", "");
+        let path = textDocument.uri.replace(rootUri, "").replace("/", "");
         // /a/b.ail => a/b.ail
         
         let source = parse(text, path);
         
         await updateModel(source);
-        await updateModelTs(source, true);
+        await updateDocument(source, rootPath);
 
 
 
@@ -231,7 +233,7 @@ const acceptClient = (socket: net.Socket)=>{
 			// The pass parameter contains the position of the text document in
 			// which code complete got requested. For the example we ignore this
             // info and always provide the same completion items.
-            let path = pos.textDocument.uri.replace(rootPath, "").replace("/", "");
+            let path = pos.textDocument.uri.replace(rootUri, "").replace("/", "");
             let fileName = path.replace("/", ".");
 
             let source = getSource(fileName);
@@ -246,13 +248,13 @@ const acceptClient = (socket: net.Socket)=>{
 
             let offset = doc.offsetAt(pos.position);
             
-            let posInGenerated = offset - source.code[0].from;
+            // let posInGenerated = offset - source.code[0].from;
 
-            let comps = await getCompletions(fileName, posInGenerated);
-            if(!comps) return [];
+            let completions = await getCompletions(source, offset);
+            if(!completions) return [];
             
             
-            return comps.entries.map((c)=>{
+            return completions.entries.map((c)=>{
                 let kind:CompletionItemKind = CompletionItemKind.Text;
                 if(c.kind === "method"){
                     kind = CompletionItemKind.Method

@@ -26,55 +26,78 @@ const sequelize = new Sequelize('postgres://postgres:hiuDPEwsEQfGKnmeSHcuJQ==@lo
     }
 });
 
-
-
-export const updateModel = async (modelSource: ModelSource, save: boolean) => {
-    let fileName = modelSource.fileName
-    let path = "./generated/default.ts";
+// @warn The language server has to be in same path as the client
+// @warn because of the root path here is on client
+const getOrCreateSource = (rootPath: string, fileName:string)=>{
     let source = fileMaps[fileName];
-    if (!source) {
-        path = fs.getCurrentDirectory() + `/src/generated/${fileName}.ts`;
-
+    if(!source){
+        // let path = fs.getCurrentDirectory() + `/src/generated/${fileName}.ts`;
+        let path = rootPath + `/generated/${fileName}.ts`;
         source = project.createSourceFile(path, "", { overwrite: true });
-        if (!source) {
-            w("source file doesn't exist");
-            return
-        }
-
         fileMaps[fileName] = source;
-
     }
-    
-    let codeChanged = false;
-    let text = "";
-    modelSource.code.forEach(c=>{
-        text+= c.text;
-        if(c.changed) codeChanged = true;
+    return source;
+}
+
+const getCodeFileName = (fileName: string, codeName: string) => fileName + ".code." + codeName;
+
+export const updateDocument = async (modelSource: ModelSource, rootPath: string) => {
+    let fileName = modelSource.fileName
+
+    // modelSource.code.forEach(c=>{
+    //     if(c.changed){
+    //         let codeFileName = getCodeFileName(fileName , c.name.value);
+    //         let source = getOrCreateSource(codeFileName);
+    //         source.removeText();
+    //         source.insertText(0, c.text);
+    //         source.save();
+    //     }
+    // });
+
+    let source = getOrCreateSource(rootPath, fileName);
+    let fileChanged = false;
+    modelSource.models.forEach(m=>{
+        if(m.changed){
+            let modelname = m.name.value;
+            let i = source.getInterface(modelname);
+            if(i) i.remove();
+            source.addInterface({
+                name: modelname,
+                properties: m.fields.map(f=>{
+                    return {
+                        name: f.name.value,
+                        type: f.type.value
+                    }
+                })
+            });
+
+
+            fileChanged = true;
+        }
     });
-    
-    if(codeChanged){
-        source.removeText();
-        source.insertText(0, text);
-
-        source.save();
-    }
 
 
 
-    
-
+    if(fileChanged) source.save();
 
 }
 
-export const getCompletions = async (fileName: string, pos: number) => {
-    l(fileName);
-    let path = fs.getCurrentDirectory() + `/src/generated/${fileName}.ts`;
-    let source = fileMaps[fileName];
+export const getCompletions = async (modelSource: ModelSource, offset: number) => {
+    let fileName = modelSource.fileName;
+    
+    let code = modelSource.code.find(c => c.from <= offset && offset <= c.to);
+    if(!code) return;
+
+
+    let codeFileName = getCodeFileName(fileName , code.name.value);
+
+    let source = fileMaps[codeFileName];
     if(!source) return;
 
-    let acs = await languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), pos, {});
+    let completions = await languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), offset - code.from, {});
 
-    return acs;
+
+    return completions;
 }
 
 export const deleteUnused = async (modelNames: string[], save: boolean) => {
