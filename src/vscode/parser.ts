@@ -43,6 +43,7 @@ export interface Model {
 }
 
 interface Code{
+    name: aststring,
     hash: string,
     text: string,
     from: number,
@@ -222,7 +223,7 @@ export const parse = (text: string, path: string) => {
 
     prevHashes = source.code.map(c=>c.hash);
     currHashes = [];
-    pattern = /[\n^]ts\s+[a-z]+\s*\{/g;
+    pattern = /[\n^]ts\s+([a-z]+)\s*\{/g;
     while (m = pattern.exec(text)){
         let s = "";
         let c = '{';
@@ -243,9 +244,15 @@ export const parse = (text: string, path: string) => {
         }
         let hash = md5(s);
         currHashes.push(hash);
-
+        let name: aststring = {
+            from: m.index,
+            to: m.index + m[1].length,
+            value: m[1]
+        }
+        
         if(!prevHashes.includes(hash)){
             source.code.push({
+                name: name,
                 from: bi,
                 to: bi + s.length,
                 text: s,
