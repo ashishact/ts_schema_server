@@ -204,7 +204,7 @@ const acceptClient = (socket: net.Socket)=>{
         let source = parse(text, path);
         
         await updateModel(source);
-        await updateDocument(source, rootPath);
+        // await updateDocument(source, rootPath);
 
 
 
