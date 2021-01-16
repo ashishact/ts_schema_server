@@ -1,8 +1,5 @@
 import { Project, ts,  SourceFile, StructureKind } from "ts-morph";
 
-import { Sequelize, DataTypes } from "sequelize";
-
-
 import type { ModelSource } from "../vscode/parser";
 
 
@@ -20,19 +17,15 @@ interface FileMaps {
 }
 const fileMaps: FileMaps = {};
 
-const sequelize = new Sequelize('postgres://postgres:hiuDPEwsEQfGKnmeSHcuJQ==@localhost:5432/appdb', {
-    define: {
-        freezeTableName: true
-    }
-});
+
 
 // @warn The language server has to be in same path as the client
 // @warn because of the root path here is on client
 const getOrCreateSource = (rootPath: string, fileName:string)=>{
     let source = fileMaps[fileName];
     if(!source){
-        // let path = fs.getCurrentDirectory() + `/src/generated/${fileName}.ts`;
-        let path = rootPath + `/generated/${fileName}.ts`;
+        let path = fs.getCurrentDirectory() + `/src/.generated/${fileName}.ts`;
+        // let path = rootPath + `/generated/${fileName}.ts`;
         source = project.createSourceFile(path, "", { overwrite: true });
         fileMaps[fileName] = source;
     }
@@ -41,8 +34,9 @@ const getOrCreateSource = (rootPath: string, fileName:string)=>{
 
 const getCodeFileName = (fileName: string, codeName: string) => fileName + ".code." + codeName;
 
+
 export const updateDocument = async (modelSource: ModelSource, rootPath: string) => {
-    let fileName = modelSource.fileName
+    let fileName = modelSource.fileName;
 
     // modelSource.code.forEach(c=>{
     //     if(c.changed){
@@ -77,6 +71,15 @@ export const updateDocument = async (modelSource: ModelSource, rootPath: string)
     });
 
 
+    // remove deleted
+    let modelnames = modelSource.models.map(m=>m.name.value);
+    source.getInterfaces().forEach(i=>{
+        if(!modelnames.includes(i.getName())){
+            fileChanged = true;
+            i.remove();
+        }
+    })
+
 
     if(fileChanged) source.save();
 
@@ -104,34 +107,7 @@ export const deleteUnused = async (modelNames: string[], save: boolean) => {
 
 }
 
-export const init = async () => {
 
-    try {
-        await sequelize.authenticate();
-        console.log('Connection has been established successfully.');
-    } catch (error) {
-        console.error('Unable to connect to the database:', error);
-        return;
-    }
-
-
-    const Student = sequelize.define('Student', {
-        // Model attributes are defined here
-        name: {
-            type: DataTypes.STRING,
-            allowNull: false
-        },
-        roll: {
-            type: DataTypes.INTEGER
-            // allowNull defaults to true
-        }
-    }, {
-        // Other model options go here
-    });
-
-    let res = await Student.sync();
-    l(res);
-}
 
 
 
@@ -139,11 +115,11 @@ export const init = async () => {
 
 
 
-export const testLs = ()=>{
-    // let text = `let abc: number = "32".`;
-    // let source = project.createSourceFile("./test.ts", text);
+// export const testLs = ()=>{
+//     // let text = `let abc: number = "32".`;
+//     // let source = project.createSourceFile("./test.ts", text);
 
-    // // let d = languageservice.compilerObject.getDefinitionAtPosition(source.getFilePath(), 6);
-    // let d = languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), text.length, {});
-    // l(d);
-}
+//     // // let d = languageservice.compilerObject.getDefinitionAtPosition(source.getFilePath(), 6);
+//     // let d = languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), text.length, {});
+//     // l(d);
+// }

@@ -6,7 +6,7 @@ services:
         ports:
             - 6379:6379
         volumes: 
-            - /tmp/redis:/data
+            - ../redis-data:/data
         # https://github.com/RedisGraph/RedisGraph/issues/575#issuecomment-516896821
                 # --loadmodule /usr/lib/redis/modules/redisgraph.so \
         command: redis-server --save 60 1 --loadmodule /usr/lib/redis/modules/redisgraph.so

@@ -1,6 +1,11 @@
 node_modules
-generated
 dist
 
+generated
+.generated
 src/generated
+src/.generated
+
+
+redis-data
 

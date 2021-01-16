@@ -2,6 +2,9 @@ import {Graph} from "redisgraph.js"
 import NodeType from "redisgraph.js/src/node";
 import GraphType from "redisgraph.js/src/graph";
 import ResultSet from "redisgraph.js/src/resultSet";
+
+
+
 import type {ModelSource} from "./parser";
 
 
@@ -81,6 +84,8 @@ const createPrimitive = async () => {
     }
 
 }
+
+
 export const updateModel = async (source: ModelSource) => {
     if(!graph) return;
 
@@ -97,9 +102,11 @@ export const updateModel = async (source: ModelSource) => {
         }
     }
     // query
-    let res = await graph.query(q).catch(l);
-    if(res){
-        printStats(res);
+    if(q.length){
+        let res = await graph.query(q).catch(l);
+        if(res){
+            printStats(res);
+        }
     }
 
 
@@ -152,33 +159,25 @@ export const updateModel = async (source: ModelSource) => {
 
             
             // Query
-            let res = await graph.query(q).catch(l);
-            if(res){
-                printStats(res);
-
-                let vs = res.next()?.getString('"OK"');
-                if(vs === "OK"){
-                    m.hasError = false;
-                }
-                else{
-                    m.hasError = true;
-                    l("FAILED => ", q);
+            if(q.length){
+                let res = await graph.query(q).catch(l);
+                if(res){
+                    printStats(res);
+    
+                    let vs = res.next()?.getString('"OK"');
+                    if(vs === "OK"){
+                        m.hasError = false;
+                    }
+                    else{
+                        m.hasError = true;
+                        l("FAILED => ", q);
+                    }
                 }
             }
 
 
 
             if(m.hasError){
-                // l(q);
-
-                // When there are field types that don't exist the above query will fail
-                // Then use just create the model without the fields
-                l("MODEL MERGE FAILED");
-                let mq = `MERGE (${modelname}:model { name: "${modelname}", file: "${filename}"})`;
-                res = await graph.query(mq).catch(l);
-                // l("ADDED MODEL NAME");
-
-
                 // fields error
                 for(let f of m.fields){
                     if(!f.name.value) {
@@ -223,7 +222,7 @@ export const updateModel = async (source: ModelSource) => {
                 dq+= `DELETE r\n`;
     
     
-                res = await graph.query(dq).catch(l);
+                let res = await graph.query(dq).catch(l);
                 if(res){
                     printStats(res);
                 }
@@ -242,7 +241,7 @@ export const updateModel = async (source: ModelSource) => {
         DELETE m
         RETURN m
     `;
-    res = await graph.query(dq).catch(l);
+    let res = await graph.query(dq).catch(l);
     if(res){
         printStats(res);
         

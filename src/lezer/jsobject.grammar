@@ -1,0 +1,36 @@
+@top Program { Object }
+
+Object { "{" commaSep<Property> "}" }
+Property { Key ":" Value }
+
+Key { name }
+Value { String | Number | boolean | Object }
+
+commaSep<content> { "" | content ("," content)* }
+
+
+Number {
+    (std.digit ("_" | std.digit)* ("." ("_" | std.digit)*)? | "." std.digit ("_" | std.digit)*)
+      (("e" | "E") ("+" | "-")? ("_" | std.digit)+)? |
+    std.digit ("_" | std.digit)* "n" |
+    "0x" (std.digit | $[a-fA-F] | "_")+ |
+    "0b" $[01_]+ |
+    "0o" $[0-7_]+
+  }
+
+  String {
+    '"' (![\\\n"] | "\\" _)* '"'? |
+    "'" (![\\\n'] | "\\" _)* "'"?
+  }
+
+  boolean { @specialize[@name=BooleanLiteral]<identifier, "true" | "false"> }
+
+
+@tokens {
+  name { std.asciiLetter+ }
+  space { $[ \t\f]+ }
+  Comment { "//" ![\n]* }
+  nl { $[\n] }
+}
+
+@skip { space | Comment }

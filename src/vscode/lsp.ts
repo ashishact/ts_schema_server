@@ -7,6 +7,8 @@ import {
 
 import {
     // createConnection,
+    Position,
+    WorkspaceChange,
 	TextDocuments,
 	Diagnostic,
 	DiagnosticSeverity,
@@ -25,18 +27,19 @@ import {
 	TextDocument
 } from 'vscode-languageserver-textdocument';
 
-import {v4 as uuid} from "uuid";
+import moment from "moment"
 
 
 
 import {hack} from "../hack";
 import { parse , getSource} from "./parser";
-import {updateDocument} from "../core/ts_model"
-import {testLs, getCompletions} from "../core/ts_model";
+// import {updateDocument} from "../core/ts_model"
+// import { getCompletions} from "../core/ts_model";
 import {updateModel} from "./graph";
+import {dataChanged, submit as replSubmit} from "./repl";
+
 
 import type {ModelSource} from "./parser";
-import { off } from 'process';
 
 
 
@@ -194,6 +197,18 @@ const acceptClient = (socket: net.Socket)=>{
         connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
     }
 
+
+    const addLines = async (path:string, position: Position, lines: string[], prefix?: string) => {
+        let workspaceChange = new WorkspaceChange();
+        let textChange = workspaceChange.getTextEditChange(path);
+        let text = lines.reduce((acc, cv) => {
+            return acc + (prefix || "// ") + cv + "\n";
+        }, "");
+        textChange.insert(Position.create(position.line + 1, 0), text + "\n");
+
+        return await connection.workspace.applyEdit(workspaceChange.edit);
+    }
+
     
 
 	async function validateTextDocument(textDocument: TextDocument): Promise<void> {
@@ -205,6 +220,7 @@ const acceptClient = (socket: net.Socket)=>{
         
         await updateModel(source);
         // await updateDocument(source, rootPath);
+        await dataChanged(source);
 
 
 
@@ -214,11 +230,15 @@ const acceptClient = (socket: net.Socket)=>{
         // finally 
         source.models.forEach(m=>m.changed = false);
         source.code.forEach(c=>c.changed = false);
+        source.repl.forEach(r=>r.changed = false);
 
 
         sendDiagnostics(textDocument, source);
         l("=====>")
     }
+
+
+
     
 
 
@@ -247,9 +267,10 @@ const acceptClient = (socket: net.Socket)=>{
 
 
             let offset = doc.offsetAt(pos.position);
+            // l("request completion at: ", offset);
             
-            // let posInGenerated = offset - source.code[0].from;
-
+            
+            /*
             let completions = await getCompletions(source, offset);
             if(!completions) return [];
             
@@ -296,6 +317,9 @@ const acceptClient = (socket: net.Socket)=>{
                     data: c.sortText
                 }
             })
+            */
+
+           return [];
 
 		}
 	);
@@ -313,7 +337,54 @@ const acceptClient = (socket: net.Socket)=>{
 			}
 			return item;
 		}
-	);
+    );
+    
+
+
+    connection.onNotification("ail.repl.submit", async (param)=>{
+        let begining = moment();
+        if(param.path){
+            let path = param.path.replace(rootPath, "").replace("/", "");
+            let fileName = path.replace(/\//g, ".");
+            let source = getSource(fileName);
+            if(!source) return;
+            let res = await replSubmit(source, param);
+
+            let now = moment();
+
+            if(param.selection?.end){
+                let pos = param.selection.end;
+                let lines:string[] = res.data;
+                
+                let stats = "";
+                if(res.action === "CREATED"){
+                    stats+= "created, ";
+                }
+                let diff = now.diff(begining, "milliseconds");
+                if(diff < 1000){
+                    stats+= "time: " + diff + " ms";
+                }
+                else {
+                    diff = now.diff(begining, "seconds");
+                    stats+= "time: " + diff + " s";
+                }
+
+                lines.push(stats);
+
+
+                let pad = "    ";
+                let m = param.lineText.match(/(\s+)[^\s]/);
+                if(m){
+                    pad = m[1];
+                }
+                let prefix = pad + "//    ";
+                
+                lines = lines.map(l=>l.trim().replace(/\n/g, "\n"+prefix)); // trim() will remove the last \n
+
+                addLines(param.path, pos, lines, prefix);
+            }
+        }
+    });
 
 	
 

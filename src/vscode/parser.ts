@@ -52,10 +52,23 @@ interface Code{
     hasError?: boolean
 }
 
+
+interface Repl{
+    name: aststring,
+    hash: string,
+    text: string,
+    from: number,
+    to: number,
+    changed: boolean,
+    hasError?: boolean
+}
+
+
 export interface ModelSource {
     fileName: string,
     models: Model[],
     code: Code[]
+    repl: Repl[]
 }
 
 let sources: {[uriName:string]: ModelSource} = {}
@@ -71,7 +84,7 @@ export const parse = (text: string, path: string) => {
         fileName = _arr[_arr.length-1];
     }
     else{
-        fileName = path.replace("/", ".");
+        fileName = path.replace(/\//g, ".");
     }
     
     
@@ -80,7 +93,8 @@ export const parse = (text: string, path: string) => {
         source = {
             fileName: fileName,
             models: [],
-            code: []
+            code: [],
+            repl: []
         }
         sources[fileName] = source; // save
     };
@@ -220,7 +234,6 @@ export const parse = (text: string, path: string) => {
 
 
     // code
-
     prevHashes = source.code.map(c=>c.hash);
     currHashes = [];
     pattern = /[\n^]ts\s+([a-z]+)\s*\{/g;
@@ -273,8 +286,64 @@ export const parse = (text: string, path: string) => {
             });   
         }
     }
-    
     source.code = source.code.filter(c=>currHashes.includes(c.hash));
+
+
+
+    // repl
+    prevHashes = source.repl.map(r=>r.hash);
+    currHashes = [];
+    pattern = /[\n^]repl\s+([a-z]+)\s*\{/g;
+    while (m = pattern.exec(text)){
+        let s = "";
+        let c = '{';
+        let curlies = [c];
+        let bi = m.index + m[0].length;
+        for(let i = bi; i < text.length; i++){
+            c = text[i];
+            if(c === '{'){
+                curlies.push(c);
+            }
+            else if(c === '}'){
+                curlies.pop();
+                if(curlies.length === 0){
+                    s = text.substring(bi, i);
+                    break;
+                }
+            }
+        }
+        let hash = md5(s);
+        currHashes.push(hash);
+        let name: aststring = {
+            from: m.index,
+            to: m.index + m[1].length,
+            value: m[1]
+        }
+        
+        if(!prevHashes.includes(hash)){
+            source.repl.push({
+                name: name,
+                from: bi,
+                to: bi + s.length,
+                text: s,
+                hash: hash,
+                changed: true
+            })
+        }
+        else{
+            // repl hasn't change
+            // but it's offset in the file might have changed
+            source.repl.find((r)=>{
+                if(r.hash === hash){
+                    r.from = bi;
+                    r.to = bi + s.length
+                    return true;
+                }
+                return false;
+            });   
+        }
+    }
+    source.repl = source.repl.filter(r=>currHashes.includes(r.hash));
 
 
 
