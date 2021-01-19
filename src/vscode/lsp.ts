@@ -40,6 +40,7 @@ import {dataChanged, submit as replSubmit} from "./repl";
 
 
 import type {ModelSource} from "./parser";
+import { RESPONSE_TYPE } from '../core/sql';
 
 
 
@@ -354,12 +355,13 @@ const acceptClient = (socket: net.Socket)=>{
 
             if(param.selection?.end){
                 let pos = param.selection.end;
-                let lines:string[] = res.data;
+                let lines:string[] = [];
+                if(res.type === RESPONSE_TYPE.MESSAGES){
+                    lines = res.messages;
+                }
                 
                 let stats = "";
-                if(res.action === "CREATED"){
-                    stats+= "created, ";
-                }
+                
                 let diff = now.diff(begining, "milliseconds");
                 if(diff < 1000){
                     stats+= "time: " + diff + " ms";
