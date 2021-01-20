@@ -33,9 +33,9 @@ import moment from "moment"
 
 import {hack} from "../hack";
 import { parse , getSource} from "./parser";
-// import {updateDocument} from "../core/ts_model"
+import {updateDocument} from "../core/ts_model"
 // import { getCompletions} from "../core/ts_model";
-import {updateModel} from "./graph";
+// import {updateModel} from "./graph";
 import {dataChanged, submit as replSubmit} from "./repl";
 
 
@@ -153,9 +153,9 @@ const acceptClient = (socket: net.Socket)=>{
             // field errors
             for(let f of m.fields){
                 if(!f.hasError) continue;
-
+                
                 // name errors
-
+                
                 // type errors
                 if(f.type.error){
                     let diagnostic: Diagnostic = {
@@ -219,9 +219,9 @@ const acceptClient = (socket: net.Socket)=>{
         
         let source = parse(text, path);
         
-        await updateModel(source);
-        // await updateDocument(source, rootPath);
-        await dataChanged(source);
+        // await updateModel(source); // graph
+        await updateDocument(source, rootPath); // ts
+        await dataChanged(source); // repl
 
 
 

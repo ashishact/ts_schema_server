@@ -39,7 +39,8 @@ export interface Model {
     fields: Field[],
     changed: boolean,
     hasValidAst?: boolean,
-    hasError?: boolean
+    hasError?: boolean,
+    tree:Tree,
 }
 
 interface Code{
@@ -74,6 +75,13 @@ export interface ModelSource {
 let sources: {[uriName:string]: ModelSource} = {}
 
 export const getSource = (fileName: string) => sources[fileName];
+export const getModel = (name: string) => {
+    for(let s of Object.values(sources)){
+        let m = s.models.find(m=>m.name.value === name);
+        if(m) return m;
+    }
+    return null;
+}
 
 export const parse = (text: string, path: string) => {
 
@@ -126,6 +134,7 @@ export const parse = (text: string, path: string) => {
                 to: m.index + s.length,
                 fields: [],
                 changed: true,
+                tree: t
             }
 
             let field: Field = {

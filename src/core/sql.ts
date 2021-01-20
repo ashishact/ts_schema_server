@@ -1,47 +1,63 @@
 import { Sequelize, ModelCtor, Model as SQLModel, DataTypes, ModelValidateOptions } from "sequelize";
-import type {Model} from "../vscode/parser";
+import type {Model, ModelSource} from "../vscode/parser";
+import {getModel} from "../vscode/parser";
 
 const l = console.log;
 const w = console.warn;
 
 
+// @todo: password?
 let sequelize = new Sequelize('postgres://postgres:hiuDPEwsEQfGKnmeSHcuJQ==@localhost:5432/appdb', {
     define: {
         freezeTableName: true
     }
 });
 
+let getDataType = (type: string) => {
+    if(type === "string") return {ref: false, type: DataTypes.STRING}
+    else if(type === "number") return {ref: false, type: DataTypes.FLOAT}
+    else if(type === "integer") return {ref: false, type:  DataTypes.INTEGER}
+
+    let refModel = getModel(type);
+    if(refModel){
+        return {ref: true, model: refModel}
+    }
+
+    return null;
+}
+
+let getValidation = (type: string):ModelValidateOptions => {
+    if(type === "string") return {isAlphanumeric: true}
+    else if(type === "number") return {isDecimal: true}
+    else if(type === "integer") return {isInt: true}
+    else return {};
+}
+
 export const updateTable = async (model: Model, sync?: boolean, alter?: boolean)=>{
-    let fields:{[name: string]: {type: DataTypes.DataType, allowNull: boolean, validate: ModelValidateOptions}} = {};
-    // {
-    //     name: {
-    //         type: DataTypes.STRING,
-    //         allowNull: false
-    //     }
-    // }
+    let fields:{[name: string]: {type: DataTypes.DataType, allowNull: boolean, validate: ModelValidateOptions, references?: {}}} = {};
 
-    let getDataType = (type: string) => {
-        if(type === "string") return DataTypes.STRING
-        else if(type === "number") return DataTypes.FLOAT
-        else if(type === "integer") return DataTypes.INTEGER
-        else return DataTypes.TEXT;
-    }
-
-    let getValidation = (type: string):ModelValidateOptions => {
-        if(type === "string") return {isAlphanumeric: true}
-        else if(type === "number") return {isDecimal: true}
-        else if(type === "integer") return {isInt: true}
-        else return {};
-    }
 
     model.fields.forEach(f=>{
-        fields[f.name.value] = {
-            type: getDataType(f.type.value),
-            allowNull: false,
-            validate: getValidation(f.type.value)
+        let dt = getDataType(f.type.value); 
+        if(dt){
+            if(dt.type){
+                fields[f.name.value] = {
+                    type: dt.type,
+                    allowNull: false,
+                    validate: getValidation(f.type.value)
+                }
+            }
+            else if(dt.model){
+                fields[f.name.value] = {
+                    type: DataTypes.INTEGER,
+                    allowNull: false,
+                    validate: {}
+                }
+            }
         }
     })
     const Table = sequelize.define(model.name.value, fields, {});
+    // Table.hasOne()
 
     if(sync){
         let res = await Table.sync({alter: alter});

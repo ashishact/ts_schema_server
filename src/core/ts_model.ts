@@ -80,8 +80,46 @@ export const updateDocument = async (modelSource: ModelSource, rootPath: string)
         }
     })
 
-
     if(fileChanged) source.save();
+
+
+
+
+    // get Error
+    let ds = source.getPreEmitDiagnostics();
+    for(let d of ds){
+        let s = d.getStart();
+        if(s){
+            let n = source.getDescendantAtPos(s);
+            if(n){
+                let p = n.getParent();
+                if(p){
+                    if(p.getKind() === ts.SyntaxKind.TypeReference){
+                        let t = n.getText();
+                        let i = n.getFirstAncestorByKind(ts.SyntaxKind.InterfaceDeclaration);
+                        if(i){
+                            let modelname = i.getName();
+                            let m = modelSource.models.find((m)=>m.name.value===modelname);
+                            if(m){
+                                m.hasError = true;
+                                let f = m.fields.find(f=>f.type.value === t);
+                                if(f){
+                                    f.hasError = true;
+                                    // TypeReference
+                                    f.type.error = d.getMessageText().toString() || (t + " is not defined"); 
+                                }
+                            }
+                        }
+                        // l(n.getKindName(), n.getKind(), n.getChildCount(), n.getText(), n.getStart());
+                    }
+                }
+            }
+
+        }
+    }
+
+
+
 
 }
 
