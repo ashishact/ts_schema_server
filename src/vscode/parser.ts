@@ -4,6 +4,7 @@ import {parser} from "../lezer/block.js"
 import * as TERM from "../lezer/block.terms.js"
 import md5 from "md5"
 import { bool } from "aws-sdk/clients/signer";
+import { serialize } from "v8";
 
 const l = console.log;
 
@@ -357,4 +358,26 @@ export const parse = (text: string, path: string) => {
 
 
 	return source;
+}
+
+
+export const serializeModel = (m: Model):string=>{
+    let obj: any = {};
+    obj.hash = m.hash
+    obj.name = m.name.value;
+    obj.type = m.type.value;
+    obj.fields = m.fields.map(f=>{
+        return {
+            name: f.name.value,
+            type: f.type.value,
+            constraints: f.constraints.map(c=>{
+                return {
+                    name: c.name.value,
+                    type: c.type.value
+                }
+            })
+        }
+    });
+    obj.hasError = m.hasError;
+    return JSON.stringify(obj);
 }

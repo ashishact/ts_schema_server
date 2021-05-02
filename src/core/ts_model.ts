@@ -1,6 +1,7 @@
 import { Project, ts,  SourceFile, StructureKind } from "ts-morph";
-
 import type { ModelSource } from "../vscode/parser";
+import {generateUri} from "./common";
+import {updateModel} from "./graph"
 
 
 const l = console.log;
@@ -19,24 +20,22 @@ const fileMaps: FileMaps = {};
 
 
 
-// @warn The language server has to be in same path as the client
-// @warn because of the root path here is on client
-const getOrCreateSource = (rootPath: string, fileName:string)=>{
-    let source = fileMaps[fileName];
+const createfilePath = (uri: string) => fs.getCurrentDirectory() + `/src/.generated/${uri}`;
+
+const getOrCreateSource = (uri:string)=>{
+    let source = fileMaps[uri];
     if(!source){
-        let path = fs.getCurrentDirectory() + `/src/.generated/${fileName}.ts`;
-        // let path = rootPath + `/generated/${fileName}.ts`;
+        let path = createfilePath(uri);
         source = project.createSourceFile(path, "", { overwrite: true });
-        fileMaps[fileName] = source;
+        fileMaps[uri] = source;
     }
     return source;
 }
 
-const getCodeFileName = (fileName: string, codeName: string) => fileName + ".code." + codeName;
 
 
-export const updateDocument = async (modelSource: ModelSource, rootPath: string) => {
-    let fileName = modelSource.fileName;
+export const updateDocument = async (ailSource: ModelSource, rootPath: string) => {
+    let fileName = ailSource.fileName;
 
     // modelSource.code.forEach(c=>{
     //     if(c.changed){
@@ -48,14 +47,19 @@ export const updateDocument = async (modelSource: ModelSource, rootPath: string)
     //     }
     // });
 
-    let source = getOrCreateSource(rootPath, fileName);
+
+
+    // INTERFACE FOR AUTO COMPLETE IN EDITOR
+    let interfaceSource = getOrCreateSource(generateUri(fileName, "interfaces"));
     let fileChanged = false;
-    modelSource.models.forEach(m=>{
+    ailSource.models.forEach(m=>{
         if(m.changed){
             let modelname = m.name.value;
-            let i = source.getInterface(modelname);
+
+            // Interface
+            let i = interfaceSource.getInterface(modelname);
             if(i) i.remove();
-            source.addInterface({
+            interfaceSource.addInterface({
                 name: modelname,
                 properties: m.fields.map(f=>{
                     return {
@@ -70,27 +74,24 @@ export const updateDocument = async (modelSource: ModelSource, rootPath: string)
         }
     });
 
-
     // remove deleted
-    let modelnames = modelSource.models.map(m=>m.name.value);
-    source.getInterfaces().forEach(i=>{
+    let modelnames = ailSource.models.map(m=>m.name.value);
+    interfaceSource.getInterfaces().forEach(i=>{
         if(!modelnames.includes(i.getName())){
             fileChanged = true;
             i.remove();
         }
-    })
-
-    if(fileChanged) source.save();
-
+    });
+    if(fileChanged) interfaceSource.save();
 
 
 
-    // get Error
-    let ds = source.getPreEmitDiagnostics();
+    // ERROR FOR EDITOR
+    let ds = interfaceSource.getPreEmitDiagnostics();
     for(let d of ds){
         let s = d.getStart();
         if(s){
-            let n = source.getDescendantAtPos(s);
+            let n = interfaceSource.getDescendantAtPos(s);
             if(n){
                 let p = n.getParent();
                 if(p){
@@ -99,7 +100,7 @@ export const updateDocument = async (modelSource: ModelSource, rootPath: string)
                         let i = n.getFirstAncestorByKind(ts.SyntaxKind.InterfaceDeclaration);
                         if(i){
                             let modelname = i.getName();
-                            let m = modelSource.models.find((m)=>m.name.value===modelname);
+                            let m = ailSource.models.find((m)=>m.name.value===modelname);
                             if(m){
                                 m.hasError = true;
                                 let f = m.fields.find(f=>f.type.value === t);
@@ -120,6 +121,8 @@ export const updateDocument = async (modelSource: ModelSource, rootPath: string)
 
 
 
+    // GRAPH MODELS FOR PERSISTENCE AND GENERATING SQL
+    await updateModel(ailSource).catch(l);
 
 }
 
@@ -129,10 +132,9 @@ export const getCompletions = async (modelSource: ModelSource, offset: number) =
     let code = modelSource.code.find(c => c.from <= offset && offset <= c.to);
     if(!code) return;
 
+    let uri = generateUri(fileName, "code", code.name.value);
+    let source = getOrCreateSource(uri);
 
-    let codeFileName = getCodeFileName(fileName , code.name.value);
-
-    let source = fileMaps[codeFileName];
     if(!source) return;
 
     let completions = await languageservice.compilerObject.getCompletionsAtPosition(source.getFilePath(), offset - code.from, {});

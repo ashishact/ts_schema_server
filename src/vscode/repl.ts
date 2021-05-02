@@ -1,6 +1,8 @@
-import {updateTable, queryModel, RESPONSE_TYPE, QueryRes} from "../core/sql";
+import {updateTable, queryModel, RESPONSE_TYPE, QueryRes} from "../core/sequelize";
 
 import type {ModelSource} from "./parser";
+
+import {findOrCreate} from "../core/sql";
 
 import EasyTable from "easy-table";
 import moment from 'moment';
@@ -39,6 +41,9 @@ export const submit = async (source: ModelSource, param: any):Promise<QueryRes> 
                             return {type: RESPONSE_TYPE.ERRORS, errors: [e.toString()]};
                         }
                     }
+                    else{
+                        // no object
+                    }
                     
                     let modelname = m[0];
                     let model = source.models.find(m=> m.name.value === modelname);
@@ -59,35 +64,33 @@ export const submit = async (source: ModelSource, param: any):Promise<QueryRes> 
                         });
                         if(invalid) return {type: RESPONSE_TYPE.ERRORS, errors};
 
-
-
-                        // No error
-                        let res = await queryModel(model, object);
-                        if(res){
-                            
-                            
+                        // call sql
+                        let [e, d] = await findOrCreate(model, object);
+                        if(d){
                             let s = "";
-                            if(res.type === RESPONSE_TYPE.NONE){
-                                return res;
-                            }
-                            if(res.type === RESPONSE_TYPE.DATA){
-                                if(res.data.length==1){
-                                    s = EasyTable.print(res.data[0]);
+                            if(Array.isArray(d)){
+                                if(d.length === 1){
+                                    s = EasyTable.print(d[0]);
                                 }
-                                else if(res.data.length > 1){
+                                else if(d.length > 1){
                                     let dateprinter = (v: Date, w: number)=> moment(v).format('Do MMM YY, hh:mm:ss');
-                                    s = EasyTable.print(res.data, {
+                                    s = EasyTable.print(d, {
                                         createdAt: {printer: dateprinter},
                                         updatedAt: {printer: dateprinter}
                                     });
                                 }
-                                let arrow = "=".repeat(s.split("\n")[0].length);
-                                return {type: RESPONSE_TYPE.MESSAGES, messages: [arrow, s, arrow]}
                             }
-                            else if(res.type === RESPONSE_TYPE.MESSAGES){
-                                return res;
+                            else{
+                                s = EasyTable.print(d);
                             }
 
+                            let arrow = "=".repeat(s.split("\n")[0].length);
+                            let lines = s.split("\n").filter(l=>l.length);
+                            return {type: RESPONSE_TYPE.MESSAGES, messages: [arrow, ...lines, arrow]}
+                        }
+
+                        if(e){
+                            return {type: RESPONSE_TYPE.MESSAGES, messages: [e]}
                         }
                     }
                 }

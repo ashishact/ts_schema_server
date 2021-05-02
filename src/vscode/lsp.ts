@@ -35,12 +35,11 @@ import {hack} from "../hack";
 import { parse , getSource} from "./parser";
 import {updateDocument} from "../core/ts_model"
 // import { getCompletions} from "../core/ts_model";
-// import {updateModel} from "./graph";
 import {dataChanged, submit as replSubmit} from "./repl";
 
 
 import type {ModelSource} from "./parser";
-import { RESPONSE_TYPE } from '../core/sql';
+import { RESPONSE_TYPE } from '../core/sequelize';
 
 
 
@@ -199,13 +198,17 @@ const acceptClient = (socket: net.Socket)=>{
     }
 
 
-    const addLines = async (path:string, position: Position, lines: string[], prefix?: string) => {
+    const addLines = async (path:string, position: Position, lines: string[], prefix: string) => {
         let workspaceChange = new WorkspaceChange();
         let textChange = workspaceChange.getTextEditChange(path);
-        let text = lines.reduce((acc, cv) => {
-            return acc + (prefix || "// ") + cv + "\n";
-        }, "");
-        textChange.insert(Position.create(position.line + 1, 0), text + "\n");
+        let text = "";
+        for(let l of lines){
+            text += prefix + "    " + l + "\n";
+        }
+
+        text = prefix + "/*\n" + text + prefix + "*/\n";
+
+        textChange.insert(Position.create(position.line + 1, 0), text);
 
         return await connection.workspace.applyEdit(workspaceChange.edit);
     }
@@ -379,9 +382,10 @@ const acceptClient = (socket: net.Socket)=>{
                 if(m){
                     pad = m[1];
                 }
-                let prefix = pad + "//    ";
                 
-                lines = lines.map(l=>l.trim().replace(/\n/g, "\n"+prefix)); // trim() will remove the last \n
+                let prefix = pad;
+                // lines = lines.map(l=>l.trim().replace(/\n/g, "\n"+prefix)); // trim() will remove the last \n
+                
 
                 addLines(param.path, pos, lines, prefix);
             }

@@ -1,0 +1,16 @@
+version: '3.6'
+
+services:
+    pgadmin:
+        image: dpage/pgadmin4:latest
+        environment:
+            PGADMIN_DEFAULT_EMAIL: act.jnv@gmail.com
+            PGADMIN_DEFAULT_PASSWORD: CI0Ya1Jhny+UqxP9cQKaQg
+            PGADMIN_LISTEN_PORT: 5050
+        ports:
+            - 5050:5050
+        volumes:
+            - pgadmin_data:/var/lib/pgadmin
+volumes:
+    pgadmin_data:
+        

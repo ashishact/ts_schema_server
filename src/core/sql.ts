@@ -1,151 +1,148 @@
-import { Sequelize, ModelCtor, Model as SQLModel, DataTypes, ModelValidateOptions } from "sequelize";
-import type {Model, ModelSource} from "../vscode/parser";
-import {getModel} from "../vscode/parser";
+import {writeFileSync} from "fs"
+import "reflect-metadata";
+import { createConnection } from "typeorm";
+import type {Connection} from "typeorm"
+
+import {getGeneratedPath} from "./common"
+import {getModels} from "./graph";
+import type {ModelI} from "./graph";
+import type {Model} from "../vscode/parser";
+
 
 const l = console.log;
-const w = console.warn;
 
+const FUNDAMENTAL_TYPE = ["string", "boolean", "number"];
 
-// @todo: password?
-let sequelize = new Sequelize('postgres://postgres:hiuDPEwsEQfGKnmeSHcuJQ==@localhost:5432/appdb', {
-    define: {
-        freezeTableName: true
-    }
-});
-
-let getDataType = (type: string) => {
-    if(type === "string") return {ref: false, type: DataTypes.STRING}
-    else if(type === "number") return {ref: false, type: DataTypes.FLOAT}
-    else if(type === "integer") return {ref: false, type:  DataTypes.INTEGER}
-
-    let refModel = getModel(type);
-    if(refModel){
-        return {ref: true, model: refModel}
-    }
-
-    return null;
-}
-
-let getValidation = (type: string):ModelValidateOptions => {
-    if(type === "string") return {isAlphanumeric: true}
-    else if(type === "number") return {isDecimal: true}
-    else if(type === "integer") return {isInt: true}
-    else return {};
-}
-
-export const updateTable = async (model: Model, sync?: boolean, alter?: boolean)=>{
-    let fields:{[name: string]: {type: DataTypes.DataType, allowNull: boolean, validate: ModelValidateOptions, references?: {}}} = {};
-
-
+const getTypeOrmSource = (model: ModelI): string=>{
+    let hasPrimary = false;
+    let refTypes: string[] = [];
     model.fields.forEach(f=>{
-        let dt = getDataType(f.type.value); 
-        if(dt){
-            if(dt.type){
-                fields[f.name.value] = {
-                    type: dt.type,
-                    allowNull: false,
-                    validate: getValidation(f.type.value)
-                }
-            }
-            else if(dt.model){
-                fields[f.name.value] = {
-                    type: DataTypes.INTEGER,
-                    allowNull: false,
-                    validate: {}
-                }
-            }
+        if(!FUNDAMENTAL_TYPE.includes(f.type)){
+            refTypes.push(f.type);
         }
     })
-    const Table = sequelize.define(model.name.value, fields, {});
-    // Table.hasOne()
 
-    if(sync){
-        let res = await Table.sync({alter: alter});
+    let className = model.name;
+    let s = "";
+    s+= `import {Entity, PrimaryGeneratedColumn, Column, OneToOne, JoinColumn} from "typeorm"; \n`;
+    
+    for(let r of refTypes){
+        s+= `import {${r}} from "./${r}" \n`;
+    }
+    s+= "\n\n";
+
+
+    s+= `@Entity() \n`;
+    s+= `export class ${className} { \n`;
+
+    if(!hasPrimary){
+        s+= `    @PrimaryGeneratedColumn() \n`
+        s+= `    id: number; \n\n`
     }
 
-    return Table;
-}
-
-export const enum RESPONSE_TYPE{
-    NONE,
-    DATA,
-    MESSAGES,
-    ERRORS
-}
-export type QueryRes = {type: RESPONSE_TYPE.NONE} | {type: RESPONSE_TYPE.DATA, data: object[], action: "CREATED"|"FOUND"} | {type: RESPONSE_TYPE.ERRORS, errors: string[]} | {type: RESPONSE_TYPE.MESSAGES, messages: string[]}
-
-export const queryModel = async (model: Model, object: any): Promise<QueryRes> =>{
-    let sqlm = sequelize.models[model.name.value];
-    if(!sqlm){
-        await updateTable(model);
-        sqlm = sequelize.models[model.name.value];
-    }
-
-    if(sqlm){
-        let errors:string[] = [];
-        let isNonRecovrableError = false;
-        let SequelizeDatabaseError = false;
-        
-        if(true){
-
-            let where:any = null
-            if(object && Object.keys(object).length) where = object;
-
-            let res = await sqlm.findAll({where: where,  limit: 10}).catch(e=>{
-                if(e && e.name === "SequelizeDatabaseError"){
-                    SequelizeDatabaseError = true;
-                }
-                errors.push(e.name);
-            });
-            
-            if(!res) {
-                if(SequelizeDatabaseError){
-                    // create table
-                    let res = await updateTable(model, true).catch(e=>{
-                        if(e){
-                            l("create table error", e.name);
-                        }
-                    }); 
-
-                    l("create table");
-                    l(res);
-                }
-            }
-            else if(res.length === 0){
-                // no data create
-                if(object && Object.keys(object).length){
-                    let res = await sqlm.findOrCreate({where: object}).catch(l);
-                    
-                    // if(!res) await updateTable(model, true, true).catch(l); // alter table
-                }
-            }
-            else if(res.length === 1){
-                return {type: RESPONSE_TYPE.DATA,  action: res[1]? "CREATED" : "FOUND", data: [res[0].toJSON()]};
-            }
-            else{
-                return {type: RESPONSE_TYPE.DATA, action: "FOUND", data: res.map(r=>r.toJSON())};
-            }
-
-
-            // return {type: RESPONSE_TYPE.ERRORS, errors};
-
-            
+    for(let f of model.fields){
+        if(refTypes.includes(f.type)){
+            // @todo: check other relationship
+            s+= `    @OneToOne(() => ${f.type})\n    @JoinColumn() \n`
         }
+        else{
+            s+= `    @Column() \n`;
+        }
+        s+= `    ${f.name}: ${f.type} \n\n`
     }
 
-    return {type: RESPONSE_TYPE.NONE}
+    s+= `}`
+
+    return s;
+}
+export const generateTypeOrmEntity = async (models: ModelI[]) => {
+    
+    models.forEach(m=>{
+        if(!m.name || !m.uri) return;
+
+        let className = m.name;
+        let filePath = getGeneratedPath(`typeorm/src/entity/${className}.ts`);
+        let source = getTypeOrmSource(m);
+        writeFileSync(filePath, source);
+    })
 }
 
-export const init = async () => {
+let connection: Connection|null = null;
+const initConnection = async (sync: boolean = false)=>{
+    await createConnection({
+        type: "postgres",
+        host: "localhost",
+        port: 5432,
+        username: "postgres",
+        password: "hiuDPEwsEQfGKnmeSHcuJQ==",
+        database: "appdb",
+        synchronize: sync,
+        logging: false,
+        entities: [
+            "src/.generated/typeorm/src/entity/**/*.ts"
+        ],
+    }).then(async (_connection) => {
+        connection = _connection;
+        l("Postgres connection success");
+    }).catch(error => l(error));
+}
 
-    try {
-        await sequelize.authenticate();
-        console.log('Connection has been established successfully.');
-    } catch (error) {
-        console.error('Unable to connect to the database:', error);
-        return;
-    }  
+export const initModels = async (sync: boolean) => {
+    let models = await getModels();
+    // models.forEach(m=>{
+    //     l(m.name, m.uri);
+    //     m.fields.forEach(f=>l(f.name));
+    // });
+
+    await generateTypeOrmEntity(models).catch(l);
+    await initConnection(sync).catch(l);
 }
 
 
-init();
+export const findOrCreate = async (model: Model, data: any): Promise<[string|null, any|null]> => {
+    let modelname = model.name.value;
+    if(!modelname) return ["not a valid model", null]
+    if(!connection) await initConnection(true);
+
+    if(!connection) {
+        return ["Connection failed", null]
+    }
+
+    let repo = connection.getRepository(model.name.value);
+
+    if(!repo) return ["No such model: " + modelname, null];
+
+    let obj: any;
+    if(data){
+        obj = await repo.findOne(data).catch(l);
+    }
+    else{
+        obj = await repo.find({
+            where: data,
+            take: 10
+        }).catch(l);
+    }
+
+    
+    if(obj) return [null, obj];
+    
+    // Create
+    l("Not found creating...");
+    obj = repo.create(data);
+    if(Array.isArray(obj)){
+        let res = await repo.save(obj).catch(l);    
+        if(res) return [null, obj];
+    }
+    else{
+        let res = await repo.save([obj]).catch(l);    
+        if(res) return [null, obj];
+    }
+    
+    return ["Failed to find or create", null];
+}
+
+
+
+// In the beginig
+
+initModels(true);

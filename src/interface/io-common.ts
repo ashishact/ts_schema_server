@@ -3,7 +3,7 @@ import { pipe } from 'fp-ts/lib/pipeable'
 import { foldMap, mapLeft } from 'fp-ts/lib/Either'
 import { reporter } from "io-ts-reporters";
 
-function optional<RT extends t.Any>(
+export function optional<RT extends t.Any>(
     type: RT,
     name: string = `${type.name} | undefined`
 ): t.UnionType<
